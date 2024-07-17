@@ -161,6 +161,23 @@ enum class StringMode {
   NullTerm // Null terminator is appended to the string data instead of prepending string length metadata
 };
 
+template<typename T, typename Stream>
+struct hasSupportedFeature {
+private:
+  template<typename U>
+  static auto test(int) -> decltype(
+    std::declval<U>().template write<T>(std::declval<T>()),
+    std::declval<U>().template read<T>(std::declval<T&>()),
+    std::true_type{}    
+  );
+
+  template<typename>
+  static std::false_type test(...);
+
+public:
+  static constexpr bool value = decltype(test<Stream>(nullptr))::value;
+};
+
 /**
  * @class binary_stream
  * @brief A class for serializing and deserializing binary data with support for different endianness.
@@ -415,12 +432,14 @@ public:
     return true;
   }
 
-  template<NetworkSerializableType FirstArg, NetworkSerializableType... Args>
+  template<typename FirstArg, typename... Args>
+  requires hasSupportedFeature<FirstArg, binary_stream>::value && 
+    (hasSupportedFeature<Args, binary_stream>::value && ...)
   bool write(const FirstArg& firstArg, const Args&... args) noexcept
   {
-    return write(firstArg) && (... && write(args));
+    return write(firstArg) && (... && write(args));  
   }
-
+  
   // TODO: Currently, the serialization of std::wstring and std::wstring_view is not supported
   // due to the variation in wchar_t size across platforms (e.g., 2 bytes on Windows, 4 bytes on Unix/Linux).
   // A future enhancement could involve standardizing on a character encoding like UTF-8 for network
@@ -654,7 +673,9 @@ public:
     return true;
   }
 
-  template<NetworkSerializableType FirstArg, NetworkSerializableType... Args>
+  template<typename FirstArg, typename... Args>
+  requires hasSupportedFeature<FirstArg, binary_stream>::value &&
+    (hasSupportedFeature<Args, binary_stream>::value && ...)
   bool read(FirstArg& firstArg, Args&... args) noexcept
   {
     return read(firstArg) && (... && read(args));
